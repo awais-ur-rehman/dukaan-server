@@ -1,4 +1,5 @@
 import { Notification, type INotification } from '../../models/Notification';
+import { NotificationRepository } from './repository';
 import { redisClient } from '../../config/redis';
 import { config } from '../../config/env';
 import admin from 'firebase-admin';
@@ -31,6 +32,37 @@ const initializeFCM = (): void => {
 };
 
 export class NotificationService {
+  private repository: NotificationRepository;
+
+  constructor() {
+    this.repository = new NotificationRepository();
+  }
+
+  async getByUserId(userId: string, page: number = 1, limit: number = 20, unreadOnly?: boolean) {
+    const { notifications, total } = await this.repository.findByUserId(userId, page, limit, unreadOnly);
+    return {
+      items: notifications.map((n) => ({
+        _id: n._id.toString(),
+        type: n.type,
+        payload: n.payload,
+        status: n.status,
+        createdAt: n.createdAt,
+        sentAt: n.sentAt,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async markAsRead(notificationId: string, userId: string) {
+    await this.repository.markAsRead(notificationId, userId);
+  }
+
+  async markAllAsRead(userId: string) {
+    await this.repository.markAllAsRead(userId);
+  }
+
   async send(data: {
     toUserId: string;
     channels: Array<'socket' | 'fcm' | 'email' | 'sms'>;

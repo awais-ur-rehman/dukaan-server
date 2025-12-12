@@ -126,6 +126,172 @@ The API is versioned at `/api/v1`. All endpoints return:
 - `GET /api/v1/merchants/:mid/cod-ledger` - Get COD ledger (requires auth)
 - `POST /api/v1/merchants/:mid/settlements` - Create settlement (requires auth)
 
+## Customer API
+
+All customer endpoints require authentication with `customer` role.
+
+### Customer Profile
+
+- `GET /api/v1/customers/profile` - Get customer profile
+- `PATCH /api/v1/customers/profile` - Update customer profile (name, phone, locale)
+
+**Update Profile Request:**
+```json
+{
+  "name": "John Doe",
+  "phone": "+923001234567",
+  "locale": "en"
+}
+```
+
+### Addresses
+
+- `POST /api/v1/addresses` - Create address with geo-point
+- `GET /api/v1/addresses` - Get all customer addresses
+- `PATCH /api/v1/addresses/:id` - Update address
+- `DELETE /api/v1/addresses/:id` - Delete address
+- `PATCH /api/v1/addresses/:id/set-default` - Set default address
+
+**Create Address Request:**
+```json
+{
+  "label": "Home",
+  "addressText": "House 123, Street X, Mirpur",
+  "geo": {
+    "lat": 33.148,
+    "lng": 73.751
+  },
+  "phone": "+923001234567",
+  "isDefault": true
+}
+```
+
+### Product Search
+
+- `GET /api/v1/products/search?q=milk&lat=33.148&lng=73.751&radius=5000` - Global product search
+
+**Query Parameters:**
+- `q` (required) - Search query
+- `lat`, `lng` (optional) - Customer location for nearby search
+- `radius` (optional) - Search radius in meters (default: 5000)
+- `category` (optional) - Filter by category
+- `minPrice`, `maxPrice` (optional) - Price range
+- `page`, `limit` (optional) - Pagination
+
+### Cart
+
+- `POST /api/v1/cart` - Add item to cart
+- `GET /api/v1/cart?merchantId=xxx` - Get cart (all carts or specific merchant)
+- `PATCH /api/v1/cart/:merchantId/items/:productId` - Update cart item quantity
+- `DELETE /api/v1/cart/:merchantId/items/:productId` - Remove item from cart
+- `DELETE /api/v1/cart/:merchantId` - Clear cart for a merchant
+
+**Add to Cart Request:**
+```json
+{
+  "merchantId": "merchant_id",
+  "productId": "product_id",
+  "qty": 2
+}
+```
+
+### Checkout
+
+- `POST /api/v1/checkout` - Convert cart to order
+
+**Checkout Request:**
+```json
+{
+  "merchantId": "merchant_id",
+  "addressId": "address_id",
+  "paymentMethod": "COD",
+  "deliverySlot": {
+    "date": "2024-01-15",
+    "window": "10:00-12:00"
+  },
+  "note": "Please deliver in the morning"
+}
+```
+
+### Favorites
+
+- `POST /api/v1/favorites` - Add shop or product to favorites
+- `GET /api/v1/favorites?type=shop` - Get favorites (filter by type: shop/product)
+- `DELETE /api/v1/favorites/:id` - Remove from favorites
+
+**Add Favorite Request:**
+```json
+{
+  "type": "shop",
+  "shopId": "merchant_id"
+}
+```
+or
+```json
+{
+  "type": "product",
+  "productId": "product_id"
+}
+```
+
+### Order History
+
+- `GET /api/v1/orders?status=DELIVERED&page=1&limit=20` - Get customer orders
+
+**Query Parameters:**
+- `status` (optional) - Filter by order status
+- `dateFrom`, `dateTo` (optional) - Date range filter
+- `page`, `limit` (optional) - Pagination
+
+### Feedback & Ratings
+
+- `POST /api/v1/feedback` - Submit feedback for delivered order
+- `GET /api/v1/feedback` - Get customer feedback history
+
+**Create Feedback Request:**
+```json
+{
+  "orderId": "order_id",
+  "rating": 5,
+  "comment": "Great service!",
+  "images": ["https://example.com/image.jpg"]
+}
+```
+
+### Disputes
+
+- `POST /api/v1/disputes` - Open dispute for order
+- `GET /api/v1/disputes` - Get customer disputes
+- `GET /api/v1/disputes/:id` - Get dispute details
+- `POST /api/v1/disputes/:id/comments` - Add comment to dispute
+
+**Create Dispute Request:**
+```json
+{
+  "orderId": "order_id",
+  "type": "ORDER_QUALITY",
+  "reason": "Items were damaged during delivery"
+}
+```
+
+**Dispute Types:**
+- `ORDER_QUALITY` - Quality issues
+- `MISSING_ITEMS` - Missing items
+- `WRONG_ITEMS` - Wrong items received
+- `PAYMENT_ISSUE` - Payment problems
+- `DELIVERY_ISSUE` - Delivery problems
+- `OTHER` - Other issues
+
+### Notifications
+
+- `GET /api/v1/notifications?page=1&limit=20&unreadOnly=true` - Get customer notifications
+- `PATCH /api/v1/notifications/:id/read` - Mark notification as read
+- `PATCH /api/v1/notifications/read-all` - Mark all notifications as read
+
+**Query Parameters:**
+- `page`, `limit` (optional) - Pagination
+- `unreadOnly` (optional) - Filter unread notifications only
+
 ## Socket.IO Events
 
 ### Server Emits
@@ -161,10 +327,18 @@ src/
 │   ├── auth/
 │   ├── merchants/
 │   ├── products/
+│   ├── product-search/
 │   ├── orders/
 │   ├── riders/
 │   ├── cod-ledger/
-│   └── notifications/
+│   ├── notifications/
+│   ├── customers/
+│   ├── addresses/
+│   ├── cart/
+│   ├── checkout/
+│   ├── favorites/
+│   ├── feedback/
+│   └── disputes/
 ├── socket/          # Socket.IO setup
 ├── jobs/            # Background jobs
 ├── utils/           # Utilities (JWT, email, cache, etc.)
@@ -175,6 +349,34 @@ src/
 ## Environment Variables
 
 See `.env.example` for all required environment variables.
+
+## Customer API Flow Summary
+
+### Complete Customer Journey
+
+1. **Authentication** → `POST /api/v1/auth/send-otp` → `POST /api/v1/auth/verify-otp`
+2. **Profile Setup** → `GET /api/v1/customers/profile` → `PATCH /api/v1/customers/profile`
+3. **Add Address** → `POST /api/v1/addresses` (with geo-point)
+4. **Discover Shops** → `GET /api/v1/merchants?lat=...&lng=...&radius=5000`
+5. **Search Products** → `GET /api/v1/products/search?q=milk&lat=...&lng=...`
+6. **Browse Products** → `GET /api/v1/merchants/:id/products`
+7. **Add to Cart** → `POST /api/v1/cart`
+8. **View Cart** → `GET /api/v1/cart?merchantId=xxx`
+9. **Checkout** → `POST /api/v1/checkout` (converts cart to order)
+10. **Track Order** → `GET /api/v1/orders` (real-time updates via Socket.IO)
+11. **Provide Feedback** → `POST /api/v1/feedback` (after delivery)
+12. **Open Dispute** → `POST /api/v1/disputes` (if needed)
+13. **View Notifications** → `GET /api/v1/notifications`
+
+### Key Features
+
+- **Multi-shop Cart**: Each merchant has a separate cart
+- **Geo-based Discovery**: Find shops and products within delivery radius
+- **Real-time Updates**: Socket.IO events for order status changes
+- **Address Management**: Multiple addresses with default selection
+- **Favorites**: Save favorite shops and products
+- **Feedback System**: Rate and review delivered orders
+- **Dispute Resolution**: Open disputes with merchant/admin mediation
 
 ## License
 

@@ -1,9 +1,10 @@
 # Dukaan-Server Backend Documentation
 
-This document is the complete backend specification for *Dukaan-Server*.
+This document is the complete backend specification for _Dukaan-Server_.
 It is written for implementers and for Cursor to ingest as a backend skill.
 
 Contents
+
 1. Overview
 2. System architecture
 3. Technology choices
@@ -25,7 +26,9 @@ Contents
 ---
 
 ## 1. Overview
+
 Dukaan-Server is the backend for a hyperlocal micro-merchant delivery system focused on Mirpur, Azad Kashmir. It provides APIs for customers, merchants (shopkeepers), riders, and an admin operator. It supports:
+
 - Real-time events via Socket.IO (with Redis adapter)
 - Background push notifications via FCM (for when apps are backgrounded)
 - Email OTP for customers and merchants via Nodemailer (with Redis for OTP storage/TTL)
@@ -34,6 +37,7 @@ Dukaan-Server is the backend for a hyperlocal micro-merchant delivery system foc
 - MongoDB for primary data storage
 
 High-level goals:
+
 - Fast, predictable order lifecycle
 - Reliable COD ledger and reconciliation
 - Low cost and open-source friendly
@@ -43,6 +47,7 @@ High-level goals:
 ## 2. System architecture
 
 Components
+
 - HTTP API server (Express + TypeScript)
 - WebSocket server (Socket.IO integrated on same process or separate namespace)
 - MongoDB (primary data store)
@@ -53,6 +58,7 @@ Components
 - Background worker(s) (bullmq or node-cron jobs; uses Redis)
 
 Deployment notes
+
 - Initially deploy as a single Node.js service (API + Socket.IO) for simplicity.
 - Use separate worker process for heavy background jobs (settlements, retries).
 - Use Docker compose in development (services: node, mongodb, redis, cloudinary config local, minio not used since Cloudinary chosen).
@@ -60,6 +66,7 @@ Deployment notes
 ---
 
 ## 3. Technology choices (summary)
+
 - Node.js + TypeScript
 - Express for HTTP
 - Socket.IO for real-time events
@@ -75,10 +82,12 @@ Deployment notes
 ## 4. Authentication & OTP
 
 Overview
+
 - Customers and Merchants authenticate by Email + OTP.
 - Riders authenticate using credentials provided by the merchant (merchant creates rider and a password credential is returned or the rider is expected to set a password via a secure link).
 
 OTP flow
+
 1. Client calls `POST /api/v1/auth/send-otp` with `{ email, purpose }` where `purpose` is `login` or `register`.
 2. Backend generates a 6-digit numeric OTP and a server-side `otpId` and stores hashed OTP in Redis with TTL (default 300s).
    - Also store metadata: purpose, email, requestId, attempts.
@@ -87,32 +96,38 @@ OTP flow
 5. Backend verifies hashed OTP from Redis and, if valid, creates/returns a JWT access token and a refresh token (stored hashed in DB / Redis) and user document if new.
 
 Security considerations
+
 - OTPs are hashed (bcrypt or HMAC) before storing in Redis.
 - Limit OTP requests per email/IP (default: 5 per hour) stored in Redis counters.
 - Limit OTP verify attempts (max 5 tries); after that mark `locked` for configurable cooldown.
 - Use `requestId` or `clientRequestId` to avoid replay attacks.
 
 Rider credentials
+
 - Merchant creates rider via `POST /api/v1/merchants/:mid/riders`.
 - Backend generates a secure temporary password or a password-reset link (valid 24 hours) and returns details to the merchant.
 - Riders authenticate with email/password or can use OTP if the system later enables it.
 
 Token management
+
 - Access token short-lived (default TTL 15 minutes); refresh token long-lived (default TTL 30 days).
 - Store refresh tokens hashed in DB (`users.refreshTokens[]`) and maintain a revocation list.
 
 Redis usage for OTP
+
 - Key pattern: `otp:{otpId}` -> { hashedCode, email, purpose, expiresAt, attempts }
 - TTL equals OTP expiration.
 
 ---
 
 ## 5. Data models (MongoDB)
+
 Note: use Mongoose with TypeScript interfaces. Provide timestamps: true and strict schemas.
 
 Schemas (key fields) below are representative; include full validation in DTOs.
 
 ### users
+
 ```
 User {
   _id: ObjectId,
@@ -127,9 +142,11 @@ User {
   createdAt, updatedAt
 }
 ```
+
 Indexes: email unique
 
 ### merchants
+
 ```
 Merchant {
   _id,
@@ -147,9 +164,11 @@ Merchant {
   createdAt, updatedAt
 }
 ```
+
 Indexes: 2dsphere on geo, ownerUserId
 
 ### riders
+
 ```
 Rider {
   _id,
@@ -164,9 +183,11 @@ Rider {
   createdAt, updatedAt
 }
 ```
+
 Indexes: merchantId, userId
 
 ### products
+
 ```
 Product {
   _id,
@@ -184,9 +205,11 @@ Product {
   createdAt, updatedAt
 }
 ```
+
 Indexes: merchantId, text index on names & description & tags
 
 ### orders
+
 ```
 Order {
   _id,
@@ -210,9 +233,11 @@ Order {
   createdAt, updatedAt
 }
 ```
+
 Indexes: merchantId, customerId, status, createdAt; compound index { merchantId:1, status:1, createdAt:-1 }
 
 ### cod_ledgers
+
 ```
 CODLedger {
   _id,
@@ -228,6 +253,7 @@ CODLedger {
 ```
 
 ### notifications (in-app logs)
+
 ```
 Notification {
   _id,
@@ -243,53 +269,71 @@ Notification {
 ---
 
 ## 6. API design (versioned: /api/v1)
+
 All endpoints require `Accept: application/json` and respond with the envelope `{ success, message, data }`.
 
 Common headers
+
 - `Authorization: Bearer <accessToken>`
 - `X-Client-Request-Id: <uuid>` (optional, for idempotency)
 
 Pagination standard
+
 - Query params: `?page=1&limit=20` (defaults: page=1, limit=20; max limit configurable)
 - Cursor-based pagination can be added later; start with page/limit.
 
 Filtering standard
+
 - Use query params: e.g., `/api/v1/merchants?lat=...&lng=...&radius=5000&open=true&query=milk`
 
 ### Auth
+
 #### POST /api/v1/auth/send-otp
+
 Request
+
 ```
 { email: string, purpose: 'login'|'register' }
 ```
+
 Response 200
+
 ```
 { success:true, message:'OTP queued', data: { otpId } }
 ```
 
 #### POST /api/v1/auth/verify-otp
+
 Request
+
 ```
 { otpId: string, code: string }
 ```
+
 Response 200
+
 ```
 { success:true, data: { accessToken, refreshToken, user } }
 ```
 
 #### POST /api/v1/auth/refresh
+
 Request
+
 ```
 { refreshToken }
 ```
 
 ### Merchant registration & profile
+
 #### POST /api/v1/merchants
+
 - Body: merchant registration with multilingual fields
 - Default status: pending
 - Response: merchant doc
 
 Example body
+
 ```
 {
   ownerUserId: "...",
@@ -303,42 +347,57 @@ Example body
 ```
 
 #### GET /api/v1/merchants/:id
+
 #### GET /api/v1/merchants (discovery)
+
 Query params: `lat,lng,radius,open,query,page,limit,category`
+
 - Uses geoNear query with `maxDistance` in meters
 - If `open=true`, filter by opening hours for current local day & time
 - Response meta: `total, page, limit`
 
 #### PATCH /api/v1/merchants/:id
+
 - Merchant updates fields; if geo or deliveryRadius changed, recalc visibility
 
 #### POST /api/v1/merchants/:id/verify (admin only)
+
 - Body: `{ approved: boolean, notes?: string }`
 - If approved: `isApproved=true` and send notification to owner
 
 ### Products
+
 #### POST /api/v1/merchants/:mid/products
+
 - Body includes multilingual names & description, price, stock, images (Cloudinary publicId/url)
 - Validate merchant owns token
 
 #### GET /api/v1/merchants/:mid/products
+
 - Query params: `page, limit, q, category, minPrice, maxPrice, inStock` (text search across names/desc)
 
 #### PATCH /api/v1/products/:id
+
 #### DELETE /api/v1/products/:id
 
 ### Riders
+
 #### POST /api/v1/merchants/:mid/riders
+
 - Merchant creates rider; backend creates `User` with role `rider` and returns credentials or reset link
 
 #### GET /api/v1/merchants/:mid/riders
+
 - Pagination and filter by `active`
 
 ### Orders
+
 All order creating endpoints must be idempotent. Clients MUST send `X-Client-Request-Id` for order creation.
 
 #### POST /api/v1/merchants/:mid/orders
+
 Request body
+
 ```
 {
   clientOrderId?: string,
@@ -349,41 +408,53 @@ Request body
   deliverySlot: { date: 'YYYY-MM-DD', window: '10:00-12:00' }
 }
 ```
+
 Server actions
+
 - Validate stock with atomic update (see concurrency) and calculate subtotal/total
 - Create order with status `PLACED` and emit socket event `order:new` to `shop:{merchantId}`
 - Create COD ledger entry (if paymentMethod is COD or DROP_AT_DOOR)
 - Return 201 with order doc
 
 #### PUT /api/v1/orders/:id/merchant-accept
+
 - Body: `{ accepted: boolean, unavailableItems?: [productId], notes?: string }`
 - If unavailableItems provided: compute new total and set status `AWAITING_CUSTOMER_CONFIRM` and emit `order:confirm-required` to `customer:{customerId}`
 
 #### PUT /api/v1/orders/:id/customer-confirm
+
 - Customer confirms or cancels
 - If confirms: set status `MERCHANT_ACCEPTED` and continue; if cancels: cancel order and revert stock
 
 #### PUT /api/v1/orders/:id/assign-rider
+
 - Merchant assigns `riderId`
 - status -> `ASSIGNED` and emit `rider:assigned` to `rider:{riderId}`
 
 #### PUT /api/v1/orders/:id/rider-update
+
 - Body: `{ status: 'PICKED_UP'|'OUT_FOR_DELIVERY'|'DELIVERED'|'FAILED', podImageUrl?, otpProvided? }`
 - On DELIVERED: set payment.status to PAID (if digital) or update COD ledger when rider marks collected
 - Emit `order:status` updates to `customer` & `shop`
 
 #### GET /api/v1/orders (merchant/customer/rider filtered)
+
 - Pagination and filters: status, dateFrom, dateTo
 
 ### COD Ledger & Settlements
+
 #### GET /api/v1/merchants/:mid/cod-ledger?status=&page=&limit=
+
 - Returns ledger entries and totals
 
 #### POST /api/v1/merchants/:mid/settlements
+
 - Admin/merchant triggers settlement; generate settlement record and mark ledger entries as SETTLED
 
 ### Notifications
+
 #### POST /api/v1/notifications/send (internal)
+
 - Body: `{ toUserId, channels:[ 'socket','fcm','email' ], type, payload }`
 - The notification module decides delivery channel based on user connection, FCM tokens, and user preferences
 
@@ -392,6 +463,7 @@ Server actions
 ## 7. Socket.IO real-time design
 
 Key design
+
 - Socket.IO with Redis Adapter for horizontal scaling
 - Authenticate sockets by `accessToken` query param or initial auth message
 - On connection, server resolves user and joins rooms:
@@ -401,14 +473,17 @@ Key design
 - Maintain an in-memory or Redis-backed presence list: `presence:shop:{shopId}` -> number of connected sockets and socketIds
 
 Redis adapter & socket persistence
+
 - Use `socket.io-redis` adapter; configure `REDIS_URL`.
 - Use Redis to store ephemeral socket->user mapping for cross-process message routing.
 
 Room and event rules
+
 - Emit from service layer, never from controllers directly.
 - Use ack callbacks for critical events (order placed, rider assigned) and handle negative acks
 
 Core socket events (server emits)
+
 - `order:new` -> `shop:{shopId}` (payload: order summary)
 - `order:confirm-required` -> `customer:{customerId}` (payload: updated items + new total)
 - `order:accepted` -> `customer:{customerId}`
@@ -418,41 +493,50 @@ Core socket events (server emits)
 - `delivery:nearby` -> `customer:{customerId}` (optional proximity alerts)
 
 Client emits (examples)
+
 - `order:create` -> server validates and replies with ack + orderId
 - `rider:location:update` -> server stores latest location (throttled) and can emit `delivery:nearby` if within threshold
 
 Fallback strategy
+
 - When a socket delivery fails or the recipient is not connected, the Notification module should queue a push notification via FCM and store the notification record in DB.
 
 ---
 
 ## 8. Caching strategy (Redis)
+
 Goals: improve discovery performance, reduce DB reads, keep cache consistency.
 
 What to cache
+
 - Merchant discovery results (shops near a coordinate) -> cache for short TTL (e.g., 30s)
 - Product lists per merchant (first page + counts) -> TTL 60s
 - Shop metadata (opening hours, delivery radius) -> TTL 5 minutes
 - Frequently used config and lookup tables -> TTL 10m
 
 Cache keys (recommendation)
+
 - `merchants:near:{lat}:{lng}:{radius}:{page}:{qhash}`
 - `merchant:products:{merchantId}:page:{n}`
 - `merchant:meta:{merchantId}`
 - `product:{id}`
 
 Invalidation strategy
+
 - On product update/create/delete: invalidate `merchant:products:{merchantId}:*` and `merchant:meta:{merchantId}`
 - On merchant update: invalidate discovery caches that include the merchant (conservative approach: invalidate `merchants:near:*` or maintain a mapping)
 - On order creation that significantly affects stock: invalidate product caches for that merchant
 
 Cache-aside pattern
+
 - Read from Redis; on miss, read from DB and populate Redis with TTL
 
 Locking and atomicity
+
 - For inventory-critical operations, use DB atomic updates. Do not rely solely on cache for stock consistency.
 
 Use Redis for other purposes
+
 - OTP store
 - Idempotency keys for `clientRequestId`
 - Socket presence and ephemeral maps
@@ -464,12 +548,15 @@ Use Redis for other purposes
 Default logic included, variables are configurable via env. Implement a middleware that consults Redis counters.
 
 Config variables (defaults)
+
 ```
 RATE_LIMIT_ENABLED=false
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_MAX_REQUESTS_PER_WINDOW=30
 ```
+
 Behavior
+
 - For each request: key = `rate:{userId||ip}:{windowStart}` increment counter; if above threshold, return 429.
 - Apply stronger limits for auth endpoints (OTP send) and order creation.
 
@@ -478,9 +565,11 @@ Note: initially set `RATE_LIMIT_ENABLED=false` and enable later. The logic is pr
 ---
 
 ## 10. Background jobs & cron tasks
+
 Implement via BullMQ or Bee-Queue. These require Redis.
 
 Jobs
+
 - Order TTL cancellation: if merchant does not accept within `ORDER_MERCHANT_TTL_MINUTES` cancel and notify customer.
 - Daily settlement job: summarize COD pending and generate settlement drafts for merchant; run once per day.
 - Failed-payment retry job: reattempt webhook calls or notify merchants of pending payments.
@@ -488,6 +577,7 @@ Jobs
 - Notification retry job: retry failed notifications to FCM or email.
 
 Job configuration examples
+
 - `ORDER_MERCHANT_TTL_MINUTES=10`
 - `SETTLEMENT_DAILY_AT=02:00` (server timezone configurable)
 
@@ -504,6 +594,7 @@ Job configuration examples
 - Use CORS allow list.
 
 Sensitive data
+
 - Never store raw OTPs; store hashed.
 - Store Cloudinary credentials and SMTP credentials in environment variables.
 
@@ -512,17 +603,20 @@ Sensitive data
 ## 12. Admin workflows
 
 Admin responsibilities
+
 - Review merchant registrations and uploaded verification docs.
 - Approve/reject merchant, with reason stored and notification to merchant.
 - View orders, disputes, settlements, and trigger manual settlement corrections.
 
 Endpoints
+
 - `GET /api/v1/admin/merchants?status=pending&page&limit`
 - `PATCH /api/v1/admin/merchants/:id/approve` body `{ approved: boolean, notes?: string }`
 - `GET /api/v1/admin/orders?status=&from=&to=&page&limit`
 - `POST /api/v1/admin/disputes/:id/resolve` body `{ resolution, adminNotes }`
 
 Audit logs
+
 - Admin actions (approve/reject) must write to `audit_logs` collection with adminId and timestamp.
 
 ---
@@ -530,10 +624,13 @@ Audit logs
 ## 13. Error handling & logging
 
 Error format
+
 ```
 { success:false, message: 'Validation failed', code: 'INVALID_PAYLOAD', details?: {} }
 ```
+
 Logging
+
 - Use Winston (structured logs) with levels: error, warn, info, debug
 - Include `traceId` for request-scoped logs (inject a unique request id on each HTTP request)
 - Log critical state transitions: order creation, merchant approval, rider assignment, settlement
@@ -543,6 +640,7 @@ Logging
 ## 14. DB indexes & concurrency control
 
 Indexes to create
+
 - users: `{ email:1 }` unique
 - merchants: `{ geo: '2dsphere' }` for geo queries
 - products: `{ merchantId:1 }`, text index `{ 'names.en': 'text', 'description.en': 'text', 'tags':'text' }`
@@ -550,16 +648,19 @@ Indexes to create
 - cod_ledgers: `{ merchantId:1, status:1 }`
 
 Concurrency & stock
+
 - Use atomic `findOneAndUpdate` with `$inc` and precondition `stock >= qty` for stock decrement
 - Example: `findOneAndUpdate({ _id: productId, stock: { $gte: qty } }, { $inc: { stock: -qty } })` and check result
 - For multi-product orders, use MongoDB transactions (session) to update multiple docs atomically if replica set is used
 
 Idempotency
+
 - For `POST /orders` enforce idempotency via `X-Client-Request-Id` stored in Redis as `idempotency:{clientRequestId}` with TTL
 
 ---
 
 ## 15. Postman collection (JSON outline)
+
 Include a Postman collection JSON file in your repo. Outline of structure (minimal example):
 
 ```
@@ -612,6 +713,7 @@ GOOGLE_MAPS_API_KEY=
 ---
 
 ## 17. Onboarding notes for Cursor
+
 - Use the module folder pattern. Generate full modules, not snippets.
 - Ensure DTOs for all endpoints. Use class-validator or zod for validation.
 - Use Socket events defined in section 7 with strict typing.
@@ -621,11 +723,3 @@ GOOGLE_MAPS_API_KEY=
 - Write seed script to create sample admin, sample merchant (approved), sample products, rider and customer.
 
 ---
-
-If you want, I will now:
-- Generate the Postman collection JSON (complete) and attach it into the repo file
-- Generate the Mongoose schema TypeScript files for all models
-- Generate a starter Express + Socket.IO project skeleton with authentication & OTP flow implemented
-
-Tell me which of the above to generate next.
-

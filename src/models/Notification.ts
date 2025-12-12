@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type NotificationChannel = 'socket' | 'fcm' | 'email' | 'sms';
-export type NotificationStatus = 'queued' | 'sent' | 'failed';
+export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'read';
 
 export interface INotification extends Document {
   toUserId: mongoose.Types.ObjectId;
@@ -25,7 +25,7 @@ const NotificationSchema = new Schema<INotification>(
     payload: { type: Schema.Types.Mixed, required: true },
     status: {
       type: String,
-      enum: ['queued', 'sent', 'failed'],
+      enum: ['queued', 'sent', 'failed', 'read'],
       default: 'queued',
     },
     sentAt: { type: Date },

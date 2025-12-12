@@ -17,6 +17,14 @@ import riderRoutes from './modules/riders/routes';
 import orderRoutes from './modules/orders/routes';
 import codLedgerRoutes from './modules/cod-ledger/routes';
 import notificationRoutes from './modules/notifications/routes';
+import customerRoutes from './modules/customers/routes';
+import addressRoutes from './modules/addresses/routes';
+import productSearchRoutes from './modules/product-search/routes';
+import cartRoutes from './modules/cart/routes';
+import checkoutRoutes from './modules/checkout/routes';
+import favoriteRoutes from './modules/favorites/routes';
+import feedbackRoutes from './modules/feedback/routes';
+import disputeRoutes from './modules/disputes/routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,10 +43,18 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', merchantRoutes);
 app.use('/api/v1', productRoutes);
+app.use('/api/v1', productSearchRoutes);
 app.use('/api/v1', riderRoutes);
 app.use('/api/v1', orderRoutes);
 app.use('/api/v1', codLedgerRoutes);
 app.use('/api/v1', notificationRoutes);
+app.use('/api/v1', customerRoutes);
+app.use('/api/v1', addressRoutes);
+app.use('/api/v1', cartRoutes);
+app.use('/api/v1', checkoutRoutes);
+app.use('/api/v1', favoriteRoutes);
+app.use('/api/v1', feedbackRoutes);
+app.use('/api/v1', disputeRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
