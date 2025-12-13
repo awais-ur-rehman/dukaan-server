@@ -10,15 +10,22 @@ export class AuthRepository {
     email: string,
     role: UserRole,
     name?: string,
-    phone?: string
+    phone?: string,
+    passwordHash?: string
   ): Promise<IUser> {
-    const user = new User({
+    const userData: any = {
       email: email.toLowerCase(),
       role,
       name,
       phone,
       profileCompleted: false,
-    });
+    };
+    
+    if (passwordHash) {
+      userData.passwordHash = passwordHash;
+    }
+    
+    const user = new User(userData);
     return user.save();
   }
 
@@ -62,6 +69,28 @@ export class AuthRepository {
     const user = await User.findById(userId).exec();
     if (!user || !user.passwordHash) return false;
     return bcrypt.compare(password, user.passwordHash);
+  }
+
+  async findById(userId: string): Promise<IUser | null> {
+    return User.findById(userId).exec();
+  }
+
+  async verifyPasswordByEmail(email: string, password: string): Promise<IUser | null> {
+    const user = await User.findOne({ email: email.toLowerCase() }).exec();
+    if (!user || !user.passwordHash) return null;
+    
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    return isValid ? user : null;
+  }
+
+  async updateUser(userId: string, updates: Partial<IUser>): Promise<IUser | null> {
+    return User.findByIdAndUpdate(userId, updates, { new: true }).exec();
+  }
+
+  async invalidateAllRefreshTokens(userId: string): Promise<void> {
+    await User.findByIdAndUpdate(userId, {
+      $set: { refreshTokens: [] },
+    }).exec();
   }
 }
 

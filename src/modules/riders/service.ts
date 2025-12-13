@@ -36,6 +36,7 @@ export class RiderService {
         _id: r._id.toString(),
         name: r.name,
         phone: r.phone,
+        email: (r.userId as any)?.email || null,
         vehicleType: r.vehicleType,
         active: r.active,
         earnings: r.earnings,
@@ -57,7 +58,20 @@ export class RiderService {
       throw new AppError('Failed to update rider', 500, 'UPDATE_FAILED');
     }
 
-    return updated;
+    const updatedWithEmail = await this.repository.findById(id);
+    if (!updatedWithEmail) {
+      throw new AppError('Failed to fetch updated rider', 500, 'FETCH_FAILED');
+    }
+
+    return {
+      _id: updatedWithEmail._id.toString(),
+      name: updatedWithEmail.name,
+      phone: updatedWithEmail.phone,
+      email: (updatedWithEmail.userId as any)?.email || null,
+      vehicleType: updatedWithEmail.vehicleType,
+      active: updatedWithEmail.active,
+      earnings: updatedWithEmail.earnings,
+    };
   }
 }
 

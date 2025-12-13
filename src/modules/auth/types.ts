@@ -1,5 +1,3 @@
-import { type IUser } from '../../models/User';
-
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
@@ -16,8 +14,14 @@ export interface OTPData {
   otpId: string;
   hashedCode: string;
   email: string;
-  purpose: 'login' | 'register';
+  purpose: 'login' | 'register' | 'password-reset' | 'signup';
   expiresAt: Date;
   attempts: number;
+  // Additional data for signup
+  signupData?: {
+    name: string;
+    phone: string;
+    passwordHash: string;
+  };
 }
 

@@ -15,10 +15,11 @@ const seed = async (): Promise<void> => {
     console.log('🌱 Starting seed process...\n');
 
     // Clean existing data (optional - comment out if you want to keep existing data)
-    // await User.deleteMany({});
-    // await Merchant.deleteMany({});
-    // await Product.deleteMany({});
-    // await Rider.deleteMany({});
+    await User.deleteMany({});
+    await Merchant.deleteMany({});
+    await Product.deleteMany({});
+    await Rider.deleteMany({});
+    console.log('🧹 Cleaned existing data\n');
 
     // 1. Create Admin User
     let admin = await User.findOne({ email: 'awaisjarral37@gmail.com' });
@@ -34,16 +35,22 @@ const seed = async (): Promise<void> => {
       console.log('⚠️  Admin user already exists:', admin.email);
     }
 
-    // 2. Create Shopkeeper (Merchant Owner)
-    let shopkeeper = await User.findOne({ email: 'asadhanzlah@gmail.com' });
+    // 2. Create Shopkeeper (Merchant Owner) with password
+    const shopkeeperPassword = 'shopkeeper123';
+    const shopkeeperPasswordHash = await bcrypt.hash(shopkeeperPassword, 10);
+    
+    let shopkeeper = await User.findOne({ email: 'shopkeeper@dukaan.com' });
     if (!shopkeeper) {
       shopkeeper = await User.create({
-        email: 'asadhanzlah@gmail.com',
-        role: 'customer', // Will be updated to merchant_owner when merchant is created
-        name: 'Shopkeeper',
-        profileCompleted: false,
+        email: 'shopkeeper@dukaan.com',
+        role: 'merchant_owner',
+        name: 'Test Shopkeeper',
+        phone: '+923001234567',
+        passwordHash: shopkeeperPasswordHash,
+        profileCompleted: true,
       });
       console.log('✅ Shopkeeper user created:', shopkeeper.email);
+      console.log('   Password:', shopkeeperPassword);
     } else {
       console.log('⚠️  Shopkeeper user already exists:', shopkeeper.email);
     }
@@ -113,11 +120,7 @@ const seed = async (): Promise<void> => {
         riders: [],
       });
 
-      // Update shopkeeper role to merchant_owner
-      await User.findByIdAndUpdate(shopkeeper._id, {
-        role: 'merchant_owner',
-        profileCompleted: true,
-      });
+      // Shopkeeper role already set
 
       console.log('✅ Merchant created:', merchant.names.en);
     } else {
@@ -214,18 +217,22 @@ const seed = async (): Promise<void> => {
       console.log(`⚠️  ${existingProducts} products already exist for this merchant`);
     }
 
-    // 5. Create Rider
+    // 5. Create Rider with password
+    const riderPassword = 'rider123';
+    const riderPasswordHash = await bcrypt.hash(riderPassword, 10);
+    
     let riderUser = await User.findOne({ email: 'rider@dukaan.com' });
     if (!riderUser) {
       riderUser = await User.create({
         email: 'rider@dukaan.com',
         role: 'rider',
-        name: 'Rider',
-        phone: '+923001234567',
+        name: 'Test Rider',
+        phone: '+923009876543',
+        passwordHash: riderPasswordHash,
         profileCompleted: true,
-        passwordHash: await bcrypt.hash('rider123', 10),
       });
       console.log('✅ Rider user created:', riderUser.email);
+      console.log('   Password:', riderPassword);
     } else {
       console.log('⚠️  Rider user already exists:', riderUser.email);
     }
@@ -258,12 +265,18 @@ const seed = async (): Promise<void> => {
 
     console.log('\n✅ Seed completed successfully!');
     console.log('\n📋 Summary:');
-    console.log(`   - Admin: ${admin.email}`);
+    console.log(`   - Admin: ${admin.email} (no password - use OTP)`);
     console.log(`   - Shopkeeper: ${shopkeeper.email}`);
+    console.log(`     Password: ${shopkeeperPassword}`);
     console.log(`   - Merchant: ${merchant.names.en} (ID: ${merchant._id})`);
     console.log(`   - Products: ${await Product.countDocuments({ merchantId: merchant._id })}`);
     console.log(`   - Rider: ${riderUser.email}`);
-    console.log('\n💡 You can now login using OTP with these email addresses.');
+    console.log(`     Password: ${riderPassword}`);
+    console.log('\n💡 Test Credentials:');
+    console.log(`   Shopkeeper Login: ${shopkeeper.email} / ${shopkeeperPassword}`);
+    console.log(`   Rider Login: ${riderUser.email} / ${riderPassword}`);
+    console.log('\n💡 Signup Flow: Use /auth/signup endpoint');
+    console.log('💡 Login Flow: Use /auth/login endpoint (shopkeeper) or /auth/rider/login (rider)');
 
     process.exit(0);
   } catch (error) {

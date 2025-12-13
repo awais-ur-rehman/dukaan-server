@@ -24,12 +24,19 @@ export const uploadImage = async (file: Buffer | string, folder?: string): Promi
 
     let result;
     if (typeof file === 'string') {
-      result = await cloudinary.uploader.upload(file, uploadOptions);
+      let uploadString = file;
+      if (!file.startsWith('data:')) {
+        uploadString = `data:image/jpeg;base64,${file}`;
+      }
+      result = await cloudinary.uploader.upload(uploadString, uploadOptions);
     } else {
-      result = await cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
-        if (error) throw error;
-        return result;
-      }).end(file);
+      result = await new Promise<any>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+        uploadStream.end(file);
+      });
     }
 
     return {

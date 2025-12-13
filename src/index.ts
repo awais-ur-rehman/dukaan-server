@@ -25,6 +25,7 @@ import checkoutRoutes from './modules/checkout/routes';
 import favoriteRoutes from './modules/favorites/routes';
 import feedbackRoutes from './modules/feedback/routes';
 import disputeRoutes from './modules/disputes/routes';
+import uploadRoutes from './modules/upload/routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -55,6 +56,7 @@ app.use('/api/v1', checkoutRoutes);
 app.use('/api/v1', favoriteRoutes);
 app.use('/api/v1', feedbackRoutes);
 app.use('/api/v1', disputeRoutes);
+app.use('/api/v1', uploadRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
