@@ -13,8 +13,16 @@ export class MerchantController {
 
   create = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      }
+
       const validated = createMerchantDto.parse(req.body);
-      const result = await this.service.create(validated);
+      const result = await this.service.create({
+        ...validated,
+        ownerUserId: userId,
+      });
 
       res.status(201).json({
         success: true,
@@ -34,6 +42,25 @@ export class MerchantController {
     try {
       const { id } = req.params;
       const result = await this.service.findById(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Merchant fetched',
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  findMyShop = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+      }
+
+      const result = await this.service.findByOwnerUserId(userId);
 
       res.status(200).json({
         success: true,

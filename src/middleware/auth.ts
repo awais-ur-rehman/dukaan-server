@@ -21,7 +21,8 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
     if (error instanceof AppError) {
       next(error);
     } else {
-      next(new AppError('Invalid token', 401, 'UNAUTHORIZED'));
+      const errorMessage = error instanceof Error ? error.message : 'Invalid token';
+      next(new AppError(errorMessage, 401, 'UNAUTHORIZED'));
     }
   }
 };

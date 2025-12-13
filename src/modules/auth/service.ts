@@ -17,12 +17,13 @@ export class AuthService {
 
   async sendOTP(email: string, purpose: 'login' | 'register'): Promise<{ otpId: string }> {
     const normalizedEmail = email.toLowerCase();
-    const rateLimitKey = `otp:rate:${normalizedEmail}`;
-    const rateLimitCount = await redisClient.get(rateLimitKey);
-
-    if (rateLimitCount && parseInt(rateLimitCount) >= config.otp.maxRequestsPerHour) {
-      throw new AppError('Too many OTP requests. Please try again later.', 429, 'RATE_LIMIT_EXCEEDED');
-    }
+    
+    // Rate limiting disabled for development
+    // const rateLimitKey = `otp:rate:${normalizedEmail}`;
+    // const rateLimitCount = await redisClient.get(rateLimitKey);
+    // if (rateLimitCount && parseInt(rateLimitCount) >= config.otp.maxRequestsPerHour) {
+    //   throw new AppError('Too many OTP requests. Please try again later.', 429, 'RATE_LIMIT_EXCEEDED');
+    // }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpId = uuidv4();
@@ -44,8 +45,9 @@ export class AuthService {
       JSON.stringify(otpData)
     );
 
-    await redisClient.incr(rateLimitKey);
-    await redisClient.expire(rateLimitKey, 3600);
+    // Rate limiting disabled for development
+    // await redisClient.incr(rateLimitKey);
+    // await redisClient.expire(rateLimitKey, 3600);
 
     await sendOTPEmail(normalizedEmail, otp, otpId);
 

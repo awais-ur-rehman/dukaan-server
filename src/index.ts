@@ -41,9 +41,9 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1', merchantRoutes);
+app.use('/api/v1/merchants', merchantRoutes);
+app.use('/api/v1', productSearchRoutes); // Must come before productRoutes to avoid /products/search matching /products/:id
 app.use('/api/v1', productRoutes);
-app.use('/api/v1', productSearchRoutes);
 app.use('/api/v1', riderRoutes);
 app.use('/api/v1', orderRoutes);
 app.use('/api/v1', codLedgerRoutes);

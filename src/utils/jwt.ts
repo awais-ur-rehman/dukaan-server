@@ -21,6 +21,17 @@ export const generateRefreshToken = (payload: TokenPayload): string => {
 };
 
 export const verifyToken = (token: string): TokenPayload => {
-  return jwt.verify(token, config.jwtSecret) as TokenPayload;
+  try {
+    return jwt.verify(token, config.jwtSecret) as TokenPayload;
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new Error('Token expired');
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      throw new Error('Invalid token signature');
+    } else if (error instanceof jwt.NotBeforeError) {
+      throw new Error('Token not active yet');
+    }
+    throw new Error('Invalid token');
+  }
 };
 

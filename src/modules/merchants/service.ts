@@ -4,6 +4,8 @@ import { type MerchantResponse, type PaginatedMerchants } from './types';
 import { deleteCachePattern, setCache, getCache } from '../../utils/cache';
 import { AppError } from '../../middleware/errorHandler';
 import { type IMerchant } from '../../models/Merchant';
+import { User } from '../../models/User';
+import mongoose from 'mongoose';
 
 export class MerchantService {
   private repository: MerchantRepository;
@@ -12,7 +14,11 @@ export class MerchantService {
     this.repository = new MerchantRepository();
   }
 
-  async create(data: CreateMerchantRequest): Promise<MerchantResponse> {
+  async create(data: CreateMerchantRequest & { ownerUserId: string }): Promise<MerchantResponse> {
+    if (!data.ownerUserId) {
+      throw new AppError('Owner user ID is required', 400, 'VALIDATION_ERROR');
+    }
+
     const existingMerchant = await this.repository.findByOwnerId(data.ownerUserId);
     if (existingMerchant) {
       throw new AppError('Merchant already exists for this user', 409, 'MERCHANT_EXISTS');
@@ -20,20 +26,35 @@ export class MerchantService {
 
     const merchantData = {
       ...data,
-      ownerUserId: data.ownerUserId,
+      ownerUserId: new mongoose.Types.ObjectId(data.ownerUserId),
       geo: {
         type: 'Point' as const,
-        coordinates: [data.geo.lng, data.geo.lat],
+        coordinates: [data.geo.lng, data.geo.lat] as [number, number],
       },
       isApproved: false,
     };
 
     const merchant = await this.repository.create(merchantData);
+    
+    // Update user role to merchant_owner
+    await User.findByIdAndUpdate(data.ownerUserId, {
+      role: 'merchant_owner',
+      profileCompleted: true,
+    }).exec();
+    
     return this.toResponse(merchant);
   }
 
   async findById(id: string): Promise<MerchantResponse> {
     const merchant = await this.repository.findById(id);
+    if (!merchant) {
+      throw new AppError('Merchant not found', 404, 'MERCHANT_NOT_FOUND');
+    }
+    return this.toResponse(merchant);
+  }
+
+  async findByOwnerUserId(ownerUserId: string): Promise<MerchantResponse> {
+    const merchant = await this.repository.findByOwnerId(ownerUserId);
     if (!merchant) {
       throw new AppError('Merchant not found', 404, 'MERCHANT_NOT_FOUND');
     }

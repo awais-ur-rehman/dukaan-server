@@ -21,7 +21,7 @@ const openingHoursSchema = z.object({
 });
 
 export const createMerchantDto = z.object({
-  ownerUserId: z.string().min(1, 'Owner user ID is required'),
+  ownerUserId: z.string().optional(),
   names: multilingualTextSchema,
   shopAddress: z.object({
     text: addressTextSchema,

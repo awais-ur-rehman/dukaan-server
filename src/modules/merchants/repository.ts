@@ -15,7 +15,10 @@ export class MerchantRepository {
   }
 
   async findByOwnerId(ownerUserId: string): Promise<IMerchant | null> {
-    return Merchant.findOne({ ownerUserId: new mongoose.Types.ObjectId(ownerUserId) }).exec();
+    return Merchant.findOne({ ownerUserId: new mongoose.Types.ObjectId(ownerUserId) })
+      .populate('ownerUserId', 'email name')
+      .populate('riders', 'name phone active')
+      .exec();
   }
 
   async update(id: string, data: Partial<IMerchant>): Promise<IMerchant | null> {
@@ -34,22 +37,13 @@ export class MerchantRepository {
     page: number,
     limit: number
   ): Promise<{ merchants: IMerchant[]; total: number }> {
-    const query: any = {
-      geo: {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [lng, lat],
-          },
-          $maxDistance: radiusMeters,
-        },
-      },
-    };
+    // Build the match query for filters
+    const matchQuery: any = {};
 
     if (filters.isApproved !== undefined) {
-      query.isApproved = filters.isApproved;
+      matchQuery.isApproved = filters.isApproved;
     } else {
-      query.isApproved = true;
+      matchQuery.isApproved = true;
     }
 
     if (filters.open) {
@@ -57,7 +51,7 @@ export class MerchantRepository {
       const day = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()];
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-      query.openingHours = {
+      matchQuery.openingHours = {
         $elemMatch: {
           day,
           slots: {
@@ -70,13 +64,64 @@ export class MerchantRepository {
       };
     }
 
-    const total = await Merchant.countDocuments(query);
-    const merchants = await Merchant.find(query)
-      .skip((page - 1) * limit)
-      .limit(limit)
+    // Add text search if query provided
+    if (filters.query) {
+      matchQuery.$or = [
+        { 'names.en': { $regex: filters.query, $options: 'i' } },
+        { 'names.ur': { $regex: filters.query, $options: 'i' } },
+      ];
+    }
+
+    // Use aggregation pipeline with $geoNear for geospatial query with sorting
+    const pipeline: any[] = [
+      {
+        $geoNear: {
+          near: {
+            type: 'Point',
+            coordinates: [lng, lat],
+          },
+          distanceField: 'distance',
+          maxDistance: radiusMeters,
+          spherical: true,
+          query: matchQuery,
+        },
+      },
+    ];
+
+    // Add pagination
+    pipeline.push(
+      { $skip: (page - 1) * limit },
+      { $limit: limit }
+    );
+
+    // Get total count using $geoWithin (for count, we don't need sorting)
+    const radiusInRadians = radiusMeters / 6378100;
+    const countQuery: any = {
+      geo: {
+        $geoWithin: {
+          $centerSphere: [[lng, lat], radiusInRadians],
+        },
+      },
+      ...matchQuery,
+    };
+
+    const [merchants, total] = await Promise.all([
+      Merchant.aggregate(pipeline).exec(),
+      Merchant.countDocuments(countQuery),
+    ]);
+
+    // Convert aggregation results to Mongoose documents and populate
+    const merchantIds = merchants.map((m) => new mongoose.Types.ObjectId(m._id));
+    const populatedMerchants = await Merchant.find({ _id: { $in: merchantIds } })
+      .populate('ownerUserId', 'email name')
       .exec();
 
-    return { merchants, total };
+    // Maintain sort order from aggregation (by distance)
+    const sortedMerchants = merchantIds.map((id) =>
+      populatedMerchants.find((m) => m._id.equals(id))
+    ).filter(Boolean) as IMerchant[];
+
+    return { merchants: sortedMerchants, total };
   }
 
   async findPending(page: number, limit: number): Promise<{ merchants: IMerchant[]; total: number }> {
